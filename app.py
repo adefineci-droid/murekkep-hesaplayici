@@ -6,12 +6,46 @@ import glob
 from PIL import Image
 from fpdf import FPDF
 import tempfile
+import json
 
 # Sayfa Ayarları
 st.set_page_config(page_title="Mürekkep Sarfiyat Analizi", page_icon="🎨", layout="wide")
 
+CONFIG_FILE = "ayarlar.json"
+
+# Varsayılan Ayarlar
+DEFAULT_CONFIG = {
+    "ink_grams": 5.08,
+    "solvent_orani": 20,
+    "vernik_orani": 50,
+    "t_etil": 50,
+    "t_npropil": 30,
+    "t_pm": 10,
+    "t_izopropil": 10,
+    "t_butil": 0,
+    "price_boya": 3.60,
+    "price_vernik": 2.60,
+    "price_etil": 1.00,
+    "price_npropil": 1.20,
+    "price_pm": 1.50,
+    "price_izopropil": 1.10,
+    "price_butil": 1.30
+}
+
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return DEFAULT_CONFIG.copy()
+    return DEFAULT_CONFIG.copy()
+
+def save_config(config_data):
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(config_data, f, indent=4, ensure_ascii=False)
+
 def tr_to_eng(text):
-    """PDF raporunda Türkçe karakter hatası almamak için çeviri yapar"""
     tr = "ğüşöçıİĞÜŞÖÇ"
     eng = "gusoiiIGUSOC"
     return text.translate(str.maketrans(tr, eng))
@@ -131,7 +165,6 @@ def create_pdf_report(data, filename="Sarfiyat_Raporu.pdf"):
         vernik_kg = kalan_govde * (data['vernik'] / 100.0)
         ham_boya_kg = kalan_govde - vernik_kg
         
-        # Genel toplamları biriktir
         total_islak_kg += kg_weight
         total_ham_boya_kg += ham_boya_kg
         total_vernik_kg += vernik_kg
@@ -145,9 +178,9 @@ def create_pdf_report(data, filename="Sarfiyat_Raporu.pdf"):
         pdf.cell(0, 6, tr_to_eng(f"   -> Tiner Karisimi: {tiner_kg:.2f} KG"), ln=True)
         pdf.ln(3)
         
-    # EN ALT KISIM: TÜM SİPARİŞİN GENEL TOPLAMI (DEPO ÇIKIŞI)
+    # EN ALT KISIM: TÜM SİPARİŞİN GENEL TOPLAMI
     pdf.ln(5)
-    pdf.set_fill_color(200, 220, 255) # Açık mavi bir arka plan
+    pdf.set_fill_color(200, 220, 255)
     pdf.set_font("Arial", "B", 14)
     pdf.cell(0, 10, tr_to_eng("TUM RENKLER ICIN GENEL TOPLAM (DEPO CIKISI)"), ln=True, fill=True)
     pdf.set_font("Arial", "B", 12)
@@ -157,7 +190,6 @@ def create_pdf_report(data, filename="Sarfiyat_Raporu.pdf"):
     pdf.cell(0, 7, tr_to_eng(f"Toplam Vernik Ihtiyaci: {total_vernik_kg:.2f} KG"), ln=True)
     pdf.cell(0, 7, tr_to_eng(f"Toplam Tiner Ihtiyaci: {total_tiner_kg:.2f} KG"), ln=True)
     
-    # Tiner Alt Kırılımı (PDF'e Yazdırma)
     if total_tiner_kg > 0:
         pdf.set_font("Arial", "I", 11)
         for t_name, t_pct in data['tiner_detay'].items():
@@ -165,9 +197,9 @@ def create_pdf_report(data, filename="Sarfiyat_Raporu.pdf"):
                 t_miktar = total_tiner_kg * (t_pct / 100.0)
                 pdf.cell(0, 6, tr_to_eng(f"    - {t_name} (%{t_pct}): {t_miktar:.2f} KG"), ln=True)
     
-    # MALIYET ANALIZI (PDF'e Yazdırma)
+    # MALIYET ANALIZI
     pdf.ln(5)
-    pdf.set_fill_color(220, 255, 220) # Açık yeşil arka plan
+    pdf.set_fill_color(220, 255, 220)
     pdf.set_font("Arial", "B", 14)
     pdf.cell(0, 10, tr_to_eng("MALIYET ANALIZI (USD)"), ln=True, fill=True)
     pdf.set_font("Arial", "", 12)
@@ -182,225 +214,190 @@ def create_pdf_report(data, filename="Sarfiyat_Raporu.pdf"):
     pdf.output(filename)
 
 # --- ARAYÜZ (UI) TASARIMI ---
-st.title("🎨 Ambalaj Mürekkep Sarfiyat ve Renk Analizi")
-st.markdown("Yüksek tirajlı rotogravür/flekso baskılar için metrekare, renk ayrımı, reçete ve maliyet tabanlı gramaj hesaplayıcı.")
+st.title("🎨 Pusula Basım - Üretim ve Maliyet Analiz Sistemi")
+cfg = load_config()
 
-# Yan Menü (Sidebar) Ayarları
-with st.sidebar:
-    st.header("⚙️ Hesaplama Ayarları")
-    ink_grams = st.number_input("%100 Dolulukta Gramaj (gr/m²)", min_value=0.1, value=5.08, step=0.01)
-    
-    st.divider()
-    st.header("🧪 Mürekkep Ana Reçetesi")
-    solvent_orani = st.slider("Tiner (Solvent) Payı (%)", min_value=0, max_value=50, value=20, step=1)
-    vernik_orani = st.slider("Vernik (Extender) Payı (%)", min_value=0, max_value=80, value=50, step=5)
-    st.info("Vernik payı %50 ise, boya 1:1 oranında vernikle açılıyor demektir.")
+# Sekmeli (Tab) Yapı
+tab1, tab2 = st.tabs(["🚀 Analiz ve Raporlama", "⚙️ Sistem ve Reçete Ayarları"])
 
-    st.divider()
-    st.header("💧 Tiner Alt Karışım Formülü (%)")
-    t_etil = st.number_input("Etil Asetat (%)", min_value=0, max_value=100, value=50, step=5)
-    t_npropil = st.number_input("n-Propil Asetat (%)", min_value=0, max_value=100, value=30, step=5)
-    t_pm = st.number_input("PM (Propylene Glycol) (%)", min_value=0, max_value=100, value=10, step=5)
-    t_izopropil = st.number_input("İzopropil Alkol (%)", min_value=0, max_value=100, value=10, step=5)
-    t_butil = st.number_input("Butil Asetat (%)", min_value=0, max_value=100, value=0, step=5)
+with tab2:
+    st.header("Sistem Ayarları")
+    st.markdown("Burada yaptığınız değişiklikler kaydedilir ve tüm analizlerde varsayılan olarak kullanılır.")
     
-    toplam_tiner_yuzde = t_etil + t_npropil + t_pm + t_izopropil + t_butil
-    if toplam_tiner_yuzde != 100:
-        st.error(f"HATA: Tiner oranları toplamı %{toplam_tiner_yuzde}. Lütfen %100'e tamamlayın!")
-    
-    st.divider()
-    st.header("💵 Birim Fiyat Ayarları (USD/KG)")
-    price_boya = st.number_input("Ham Boya Fiyatı", min_value=0.0, value=3.60, step=0.10)
-    price_vernik = st.number_input("Vernik Fiyatı", min_value=0.0, value=2.60, step=0.10)
-    
-    st.subheader("Solvent Fiyatları")
-    price_etil = st.number_input("Etil Asetat Fiyatı", min_value=0.0, value=1.00, step=0.10)
-    price_npropil = st.number_input("n-Propil Asetat Fiyatı", min_value=0.0, value=1.20, step=0.10)
-    price_pm = st.number_input("PM Fiyatı", min_value=0.0, value=1.50, step=0.10)
-    price_izopropil = st.number_input("İzopropil Alkol Fiyatı", min_value=0.0, value=1.10, step=0.10)
-    price_butil = st.number_input("Butil Asetat Fiyatı", min_value=0.0, value=1.30, step=0.10)
-    
-    st.divider()
-    st.header("📦 Üretim Ayarları")
-    order_qty = st.number_input("Sipariş Miktarı (Adet)", min_value=1, value=50000, step=1000)
-
-# Dosya Yükleme Alanı
-uploaded_file = st.file_uploader("Lütfen PDF baskı dosyasını yükleyin", type=["pdf"])
-
-if uploaded_file is not None and toplam_tiner_yuzde == 100:
-    st.success(f"{uploaded_file.name} başarıyla yüklendi!")
-    
-    if st.button("🚀 Analizi Başlat", type="primary"):
-        with st.spinner('Renk plakaları ayrıştırılıyor ve hesaplanıyor... Lütfen bekleyin.'):
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
-                temp_pdf.write(uploaded_file.read())
-                temp_pdf_path = temp_pdf.name
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.subheader("Baskı Standartları")
+        ink_grams = st.number_input("%100 Dolulukta Gramaj (gr/m²)", min_value=0.1, value=float(cfg['ink_grams']), step=0.01)
+        solvent_orani = st.slider("Tiner (Solvent) Payı (%)", min_value=0, max_value=50, value=int(cfg['solvent_orani']), step=1)
+        vernik_orani = st.slider("Vernik (Extender) Payı (%)", min_value=0, max_value=80, value=int(cfg['vernik_orani']), step=5)
+        
+    with c2:
+        st.subheader("Tiner Karışım Oranları (%)")
+        t_etil = st.number_input("Etil Asetat (%)", min_value=0, max_value=100, value=int(cfg['t_etil']), step=5)
+        t_npropil = st.number_input("n-Propil Asetat (%)", min_value=0, max_value=100, value=int(cfg['t_npropil']), step=5)
+        t_pm = st.number_input("PM (Propylene Glycol) (%)", min_value=0, max_value=100, value=int(cfg['t_pm']), step=5)
+        t_izopropil = st.number_input("İzopropil Alkol (%)", min_value=0, max_value=100, value=int(cfg['t_izopropil']), step=5)
+        t_butil = st.number_input("Butil Asetat (%)", min_value=0, max_value=100, value=int(cfg['t_butil']), step=5)
+        
+        toplam_t = t_etil + t_npropil + t_pm + t_izopropil + t_butil
+        if toplam_t != 100:
+            st.error(f"HATA: Toplam %{toplam_t}. Lütfen %100'e tamamlayın!")
             
-            # Analizi Yap
-            areas_sqm = get_page_dimensions_in_sqm(temp_pdf_path)
-            coverages_by_page = get_spot_coverages(temp_pdf_path)
-            
-            if not coverages_by_page:
-                st.warning("Belgede analiz edilecek renk bulunamadı.")
-            else:
-                total_ink_all_colors = {}
-                total_area = sum(areas_sqm)
-                
-                # --- Maliyet Ön Hesaplamaları ---
-                grand_total = {color: weight * order_qty for color, weight in total_ink_all_colors.items()}
-                
-                report_data = {
-                    'filename': uploaded_file.name,
-                    'criteria': ink_grams,
-                    'order_qty': order_qty,
-                    'total_area': total_area,
-                    'pages': [],
-                    'total_ink': {},
-                    'grand_total_ink': {},
-                    'solvent': solvent_orani,
-                    'vernik': vernik_orani,
-                    'tiner_detay': {
-                        'Etil Asetat': t_etil,
-                        'n-Propil Asetat': t_npropil,
-                        'PM (Propylene Glycol)': t_pm,
-                        'Izopropil Alkol': t_izopropil,
-                        'Butil Asetat': t_butil
-                    },
-                    'prices': {
-                        'boya': price_boya,
-                        'vernik': price_vernik,
-                        'tiner_bilesenler': {
-                            'Etil Asetat': price_etil,
-                            'n-Propil Asetat': price_npropil,
-                            'PM (Propylene Glycol)': price_pm,
-                            'Izopropil Alkol': price_izopropil,
-                            'Butil Asetat': price_butil
-                        }
-                    },
-                    'costs': {} # Döngü sonrası dolacak
-                }
-                
-                st.subheader("📊 Sayfa Bazlı Analiz (Tek Adet İçin)")
-                
-                for i, area in enumerate(areas_sqm):
-                    page_num = i + 1
-                    page_coverages = coverages_by_page.get(page_num, {})
+    with c3:
+        st.subheader("Birim Fiyatlar (USD/KG)")
+        price_boya = st.number_input("Ham Boya Fiyatı", min_value=0.0, value=float(cfg['price_boya']), step=0.10)
+        price_vernik = st.number_input("Vernik Fiyatı", min_value=0.0, value=float(cfg['price_vernik']), step=0.10)
+        price_etil = st.number_input("Etil Asetat Fiyatı", min_value=0.0, value=float(cfg['price_etil']), step=0.10)
+        price_npropil = st.number_input("n-Propil Asetat Fiyatı", min_value=0.0, value=float(cfg['price_npropil']), step=0.10)
+        price_pm = st.number_input("PM Fiyatı", min_value=0.0, value=float(cfg['price_pm']), step=0.10)
+        price_izopropil = st.number_input("İzopropil Alkol Fiyatı", min_value=0.0, value=float(cfg['price_izopropil']), step=0.10)
+        price_butil = st.number_input("Butil Asetat Fiyatı", min_value=0.0, value=float(cfg['price_butil']), step=0.10)
+
+    if st.button("💾 Ayarları Kaydet", type="primary"):
+        if toplam_t == 100:
+            new_config = {
+                "ink_grams": ink_grams, "solvent_orani": solvent_orani, "vernik_orani": vernik_orani,
+                "t_etil": t_etil, "t_npropil": t_npropil, "t_pm": t_pm, "t_izopropil": t_izopropil, "t_butil": t_butil,
+                "price_boya": price_boya, "price_vernik": price_vernik, "price_etil": price_etil,
+                "price_npropil": price_npropil, "price_pm": price_pm, "price_izopropil": price_izopropil, "price_butil": price_butil
+            }
+            save_config(new_config)
+            st.success("Ayarlar başarıyla kaydedildi! Analiz sekmesine geçebilirsiniz.")
+        else:
+            st.error("Tiner oranları toplamı %100 olmadan ayarlar kaydedilemez.")
+
+with tab1:
+    st.markdown("Dosyanızı yükleyin ve güncel ayarlarla üretimi planlayın.")
+    
+    col_file, col_qty = st.columns([3, 1])
+    with col_file:
+        uploaded_file = st.file_uploader("Lütfen PDF baskı dosyasını yükleyin", type=["pdf"])
+    with col_qty:
+        order_qty = st.number_input("Sipariş Miktarı (Adet)", min_value=1, value=50000, step=1000)
+
+    # Aktif konfigürasyon üzerinden hesaplama kontrolü
+    toplam_tiner_yuzde = cfg['t_etil'] + cfg['t_npropil'] + cfg['t_pm'] + cfg['t_izopropil'] + cfg['t_butil']
+    
+    if uploaded_file is not None:
+        if toplam_tiner_yuzde != 100:
+             st.error("Ayarlar sekmesindeki tiner oranları toplamı %100 değil. Lütfen düzeltin.")
+        else:
+            if st.button("🚀 Analizi Başlat", type="primary", use_container_width=True):
+                with st.spinner('Renk plakaları ayrıştırılıyor ve maliyet hesaplanıyor...'):
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
+                        temp_pdf.write(uploaded_file.read())
+                        temp_pdf_path = temp_pdf.name
                     
-                    with st.expander(f"📄 Sayfa {page_num} (Alan: {area:.4f} m²)", expanded=True):
-                        page_info = {'page_num': page_num, 'area': area, 'colors': []}
+                    areas_sqm = get_page_dimensions_in_sqm(temp_pdf_path)
+                    coverages_by_page = get_spot_coverages(temp_pdf_path)
+                    
+                    if not coverages_by_page:
+                        st.warning("Belgede analiz edilecek renk bulunamadı.")
+                    else:
+                        total_ink_all_colors = {}
+                        total_area = sum(areas_sqm)
                         
-                        for color_name, coverage in page_coverages.items():
-                            covered_area = area * coverage
-                            ink_weight = covered_area * ink_grams
+                        report_data = {
+                            'filename': uploaded_file.name,
+                            'criteria': cfg['ink_grams'],
+                            'order_qty': order_qty,
+                            'total_area': total_area,
+                            'pages': [],
+                            'total_ink': {},
+                            'grand_total_ink': {},
+                            'solvent': cfg['solvent_orani'],
+                            'vernik': cfg['vernik_orani'],
+                            'tiner_detay': {
+                                'Etil Asetat': cfg['t_etil'], 'n-Propil Asetat': cfg['t_npropil'],
+                                'PM (Propylene Glycol)': cfg['t_pm'], 'Izopropil Alkol': cfg['t_izopropil'], 'Butil Asetat': cfg['t_butil']
+                            },
+                            'prices': {
+                                'boya': cfg['price_boya'], 'vernik': cfg['price_vernik'],
+                                'tiner_bilesenler': {
+                                    'Etil Asetat': cfg['price_etil'], 'n-Propil Asetat': cfg['price_npropil'],
+                                    'PM (Propylene Glycol)': cfg['price_pm'], 'Izopropil Alkol': cfg['price_izopropil'], 'Butil Asetat': cfg['price_butil']
+                                }
+                            },
+                            'costs': {}
+                        }
+                        
+                        st.subheader("📊 Sayfa Bazlı Analiz (Tek Adet İçin)")
+                        
+                        for i, area in enumerate(areas_sqm):
+                            page_num = i + 1
+                            page_coverages = coverages_by_page.get(page_num, {})
                             
-                            if color_name not in total_ink_all_colors:
-                                total_ink_all_colors[color_name] = 0.0
-                            total_ink_all_colors[color_name] += ink_weight
-                            
-                            st.write(f"**{color_name}:** %{coverage*100:.2f} yoğunluk ➔ **{ink_weight:.4f} gram**")
-                            
-                            page_info['colors'].append({'name': color_name, 'coverage': coverage*100, 'weight': ink_weight})
+                            with st.expander(f"📄 Sayfa {page_num} (Alan: {area:.4f} m²)", expanded=True):
+                                page_info = {'page_num': page_num, 'area': area, 'colors': []}
+                                for color_name, coverage in page_coverages.items():
+                                    covered_area = area * coverage
+                                    ink_weight = covered_area * cfg['ink_grams']
+                                    if color_name not in total_ink_all_colors:
+                                        total_ink_all_colors[color_name] = 0.0
+                                    total_ink_all_colors[color_name] += ink_weight
+                                    st.write(f"**{color_name}:** %{coverage*100:.2f} yoğunluk ➔ **{ink_weight:.4f} gram**")
+                                    page_info['colors'].append({'name': color_name, 'coverage': coverage*100, 'weight': ink_weight})
+                                report_data['pages'].append(page_info)
                         
-                        report_data['pages'].append(page_info)
-                
-                report_data['total_ink'] = total_ink_all_colors
-                
-                # Tüm Sipariş İçin Toplam Hesaplama (Adet * Tekli Ağırlık)
-                grand_total = {color: weight * order_qty for color, weight in total_ink_all_colors.items()}
-                report_data['grand_total_ink'] = grand_total
-                
-                st.divider()
-                
-                # Ekranda İki Sütunlu Gösterim
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.subheader("🔹 Tek Adet İçin")
-                    for color, weight in total_ink_all_colors.items():
-                        st.metric(label=color, value=f"{weight:.4f} gr")
+                        report_data['total_ink'] = total_ink_all_colors
+                        grand_total = {color: weight * order_qty for color, weight in total_ink_all_colors.items()}
+                        report_data['grand_total_ink'] = grand_total
                         
-                with col2:
-                    st.subheader(f"🏆 Tüm Sipariş İçin ({order_qty:,} Adet)")
-                    for color, total_w in grand_total.items():
-                        kg_w = total_w / 1000.0
+                        st.divider()
+                        st.subheader("📦 Tüm Renkler İçin Genel Toplam İhtiyaç (Depo Çıkışı)")
                         
-                        # Reçete Hesaplamaları
-                        tiner_kg = kg_w * (solvent_orani / 100.0)
-                        kalan_govde_kg = kg_w - tiner_kg
-                        vernik_kg = kalan_govde_kg * (vernik_orani / 100.0)
-                        ham_boya_kg = kalan_govde_kg - vernik_kg
+                        t_islak = sum([w/1000.0 for w in grand_total.values()])
+                        t_tiner = t_islak * (cfg['solvent_orani'] / 100.0)
+                        t_govde = t_islak - t_tiner
+                        t_vernik = t_govde * (cfg['vernik_orani'] / 100.0)
+                        t_ham = t_govde - t_vernik
                         
-                        st.metric(label=f"{color} (Toplam Kova)", value=f"{kg_w:.2f} KG")
-                        st.markdown(f"""
-                        * 🛢️ **Ham Boya (Çin):** {ham_boya_kg:.2f} KG
-                        * 💧 **Vernik:** {vernik_kg:.2f} KG
-                        * 🧪 **Tiner Karışımı:** {tiner_kg:.2f} KG
-                        ---
-                        """)
-                
-                # EKRAN İÇİN GENEL TOPLAM ÖZETİ
-                st.divider()
-                st.subheader("📦 Tüm Renkler İçin Genel Toplam İhtiyaç (Depo Çıkışı)")
-                
-                t_islak = sum([w/1000.0 for w in grand_total.values()])
-                t_tiner = t_islak * (solvent_orani / 100.0)
-                t_govde = t_islak - t_tiner
-                t_vernik = t_govde * (vernik_orani / 100.0)
-                t_ham = t_govde - t_vernik
-                
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Toplam Islak Karışım", f"{t_islak:.2f} KG")
-                c2.metric("Toplam Ham Boya", f"{t_ham:.2f} KG")
-                c3.metric("Toplam Vernik", f"{t_vernik:.2f} KG")
-                c4.metric("Toplam Tiner Karışımı", f"{t_tiner:.2f} KG")
-                
-                # Maliyet Hesaplama
-                cost_ham_boya = t_ham * price_boya
-                cost_vernik = t_vernik * price_vernik
-                cost_tiner = 0.0
-                
-                if t_tiner > 0:
-                    with st.expander("🧪 Tiner Alt Bileşenleri (Detaylı KG)"):
-                        for t_name, t_pct in report_data['tiner_detay'].items():
-                            if t_pct > 0:
-                                t_miktar = t_tiner * (t_pct / 100.0)
-                                b_fiyat = report_data['prices']['tiner_bilesenler'][t_name]
-                                b_cost = t_miktar * b_fiyat
-                                cost_tiner += b_cost
-                                st.write(f"- **{t_name} (%{t_pct}):** {t_miktar:.2f} KG")
-                                
-                total_cost = cost_ham_boya + cost_vernik + cost_tiner
-                
-                report_data['costs'] = {
-                    'ham_boya': cost_ham_boya,
-                    'vernik': cost_vernik,
-                    'tiner': cost_tiner,
-                    'toplam': total_cost
-                }
-                
-                st.divider()
-                st.subheader("💰 Maliyet Analizi (USD)")
-                mc1, mc2, mc3, mc4 = st.columns(4)
-                mc1.metric("Ham Boya Maliyeti", f"${cost_ham_boya:,.2f}")
-                mc2.metric("Vernik Maliyeti", f"${cost_vernik:,.2f}")
-                mc3.metric("Tiner Maliyeti", f"${cost_tiner:,.2f}")
-                mc4.metric("TOPLAM MALIYET", f"${total_cost:,.2f}")
-                
-                # Rapor Oluşturma ve İndirme Butonu
-                report_file = "Sarfiyat_Raporu.pdf"
-                create_pdf_report(report_data, report_file)
-                
-                st.divider()
-                with open(report_file, "rb") as pdf_file:
-                    st.download_button(
-                        label="📥 Sonuçları PDF Raporu Olarak İndir",
-                        data=pdf_file,
-                        file_name=f"{uploaded_file.name}_Rapor.pdf",
-                        mime="application/pdf",
-                        type="primary"
-                    )
-            
-            os.remove(temp_pdf_path)
-elif uploaded_file is not None and toplam_tiner_yuzde != 100:
-    st.warning("Tiner karışım oranları toplamı %100 olmadan analiz başlatılamaz.")
-
+                        c1, c2, c3, c4 = st.columns(4)
+                        c1.metric("Toplam Islak Karışım", f"{t_islak:.2f} KG")
+                        c2.metric("Toplam Ham Boya", f"{t_ham:.2f} KG")
+                        c3.metric("Toplam Vernik", f"{t_vernik:.2f} KG")
+                        c4.metric("Toplam Tiner Karışımı", f"{t_tiner:.2f} KG")
+                        
+                        cost_ham_boya = t_ham * cfg['price_boya']
+                        cost_vernik = t_vernik * cfg['price_vernik']
+                        cost_tiner = 0.0
+                        
+                        if t_tiner > 0:
+                            with st.expander("🧪 Tiner Alt Bileşenleri (Detaylı KG ve Maliyet)"):
+                                for t_name, t_pct in report_data['tiner_detay'].items():
+                                    if t_pct > 0:
+                                        t_miktar = t_tiner * (t_pct / 100.0)
+                                        b_fiyat = report_data['prices']['tiner_bilesenler'][t_name]
+                                        b_cost = t_miktar * b_fiyat
+                                        cost_tiner += b_cost
+                                        st.write(f"- **{t_name} (%{t_pct}):** {t_miktar:.2f} KG ( ${b_cost:.2f} )")
+                                        
+                        total_cost = cost_ham_boya + cost_vernik + cost_tiner
+                        
+                        report_data['costs'] = {
+                            'ham_boya': cost_ham_boya, 'vernik': cost_vernik, 'tiner': cost_tiner, 'toplam': total_cost
+                        }
+                        
+                        st.divider()
+                        st.subheader("💰 Maliyet Analizi (USD)")
+                        mc1, mc2, mc3, mc4 = st.columns(4)
+                        mc1.metric("Ham Boya Maliyeti", f"${cost_ham_boya:,.2f}")
+                        mc2.metric("Vernik Maliyeti", f"${cost_vernik:,.2f}")
+                        mc3.metric("Tiner Maliyeti", f"${cost_tiner:,.2f}")
+                        mc4.metric("TOPLAM MALIYET", f"${total_cost:,.2f}")
+                        
+                        report_file = "Sarfiyat_Raporu.pdf"
+                        create_pdf_report(report_data, report_file)
+                        
+                        st.divider()
+                        with open(report_file, "rb") as pdf_file:
+                            st.download_button(
+                                label="📥 Sonuçları PDF Raporu Olarak İndir",
+                                data=pdf_file,
+                                file_name=f"{uploaded_file.name}_Rapor.pdf",
+                                mime="application/pdf",
+                                type="primary",
+                                use_container_width=True
+                            )
+                    
+                    os.remove(temp_pdf_path)
