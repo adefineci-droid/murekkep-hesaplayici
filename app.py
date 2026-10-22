@@ -119,12 +119,23 @@ def create_pdf_report(data, filename="Sarfiyat_Raporu.pdf"):
     pdf.cell(0, 10, tr_to_eng(f"TUM SIPARIS ICIN GENEL TOPLAM ({data['order_qty']:,.0f} Adet)"), ln=True, fill=True)
     pdf.set_font("Arial", "", 12)
     
+    total_islak_kg = 0
+    total_ham_boya_kg = 0
+    total_vernik_kg = 0
+    total_tiner_kg = 0
+    
     for color_name, weight in data['grand_total_ink'].items():
         kg_weight = weight / 1000.0
         tiner_kg = kg_weight * (data['solvent'] / 100.0)
         kalan_govde = kg_weight - tiner_kg
         vernik_kg = kalan_govde * (data['vernik'] / 100.0)
         ham_boya_kg = kalan_govde - vernik_kg
+        
+        # Genel toplamları biriktir
+        total_islak_kg += kg_weight
+        total_ham_boya_kg += ham_boya_kg
+        total_vernik_kg += vernik_kg
+        total_tiner_kg += tiner_kg
         
         pdf.set_font("Arial", "B", 12)
         pdf.cell(0, 8, tr_to_eng(f"[{color_name}] Toplam Kova (Islak): {kg_weight:.2f} KG"), ln=True)
@@ -133,6 +144,18 @@ def create_pdf_report(data, filename="Sarfiyat_Raporu.pdf"):
         pdf.cell(0, 6, tr_to_eng(f"   -> Vernik: {vernik_kg:.2f} KG"), ln=True)
         pdf.cell(0, 6, tr_to_eng(f"   -> Tiner: {tiner_kg:.2f} KG"), ln=True)
         pdf.ln(3)
+        
+    # EN ALT KISIM: TÜM SİPARİŞİN GENEL TOPLAMI (DEPO ÇIKIŞI)
+    pdf.ln(5)
+    pdf.set_fill_color(200, 220, 255) # Açık mavi bir arka plan
+    pdf.set_font("Arial", "B", 14)
+    pdf.cell(0, 10, tr_to_eng("TUM RENKLER ICIN GENEL TOPLAM (DEPO CIKISI)"), ln=True, fill=True)
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 8, tr_to_eng(f"TOPLAM ISLAK KARSIM: {total_islak_kg:.2f} KG"), ln=True)
+    pdf.set_font("Arial", "", 12)
+    pdf.cell(0, 7, tr_to_eng(f"Toplam Ham Boya (Cinden): {total_ham_boya_kg:.2f} KG"), ln=True)
+    pdf.cell(0, 7, tr_to_eng(f"Toplam Vernik Ihtiyaci: {total_vernik_kg:.2f} KG"), ln=True)
+    pdf.cell(0, 7, tr_to_eng(f"Toplam Tiner Ihtiyaci: {total_tiner_kg:.2f} KG"), ln=True)
         
     pdf.output(filename)
 
@@ -248,6 +271,22 @@ if uploaded_file is not None:
                         * 🧪 **Tiner:** {tiner_kg:.2f} KG
                         ---
                         """)
+                
+                # EKRAN İÇİN GENEL TOPLAM ÖZETİ
+                st.divider()
+                st.subheader("📦 Tüm Renkler İçin Genel Toplam İhtiyaç (Depo Çıkışı)")
+                
+                t_islak = sum([w/1000.0 for w in grand_total.values()])
+                t_tiner = t_islak * (solvent_orani / 100.0)
+                t_govde = t_islak - t_tiner
+                t_vernik = t_govde * (vernik_orani / 100.0)
+                t_ham = t_govde - t_vernik
+                
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Toplam Islak Karışım", f"{t_islak:.2f} KG")
+                c2.metric("Toplam Ham Boya", f"{t_ham:.2f} KG")
+                c3.metric("Toplam Vernik", f"{t_vernik:.2f} KG")
+                c4.metric("Toplam Tiner", f"{t_tiner:.2f} KG")
                 
                 # Rapor Oluşturma ve İndirme Butonu
                 report_file = "Sarfiyat_Raporu.pdf"
