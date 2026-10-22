@@ -142,7 +142,7 @@ def create_pdf_report(data, filename="Sarfiyat_Raporu.pdf"):
         pdf.set_font("Arial", "", 11)
         pdf.cell(0, 6, tr_to_eng(f"   -> Ham Boya (Cinden): {ham_boya_kg:.2f} KG"), ln=True)
         pdf.cell(0, 6, tr_to_eng(f"   -> Vernik: {vernik_kg:.2f} KG"), ln=True)
-        pdf.cell(0, 6, tr_to_eng(f"   -> Tiner: {tiner_kg:.2f} KG"), ln=True)
+        pdf.cell(0, 6, tr_to_eng(f"   -> Tiner Karisimi: {tiner_kg:.2f} KG"), ln=True)
         pdf.ln(3)
         
     # EN ALT KISIM: TÜM SİPARİŞİN GENEL TOPLAMI (DEPO ÇIKIŞI)
@@ -151,11 +151,19 @@ def create_pdf_report(data, filename="Sarfiyat_Raporu.pdf"):
     pdf.set_font("Arial", "B", 14)
     pdf.cell(0, 10, tr_to_eng("TUM RENKLER ICIN GENEL TOPLAM (DEPO CIKISI)"), ln=True, fill=True)
     pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 8, tr_to_eng(f"TOPLAM ISLAK KARSIM: {total_islak_kg:.2f} KG"), ln=True)
+    pdf.cell(0, 8, tr_to_eng(f"TOPLAM ISLAK KARISIM: {total_islak_kg:.2f} KG"), ln=True)
     pdf.set_font("Arial", "", 12)
     pdf.cell(0, 7, tr_to_eng(f"Toplam Ham Boya (Cinden): {total_ham_boya_kg:.2f} KG"), ln=True)
     pdf.cell(0, 7, tr_to_eng(f"Toplam Vernik Ihtiyaci: {total_vernik_kg:.2f} KG"), ln=True)
     pdf.cell(0, 7, tr_to_eng(f"Toplam Tiner Ihtiyaci: {total_tiner_kg:.2f} KG"), ln=True)
+    
+    # Tiner Alt Kırılımı (PDF'e Yazdırma)
+    if total_tiner_kg > 0:
+        pdf.set_font("Arial", "I", 11)
+        for t_name, t_pct in data['tiner_detay'].items():
+            if t_pct > 0:
+                t_miktar = total_tiner_kg * (t_pct / 100.0)
+                pdf.cell(0, 6, tr_to_eng(f"    - {t_name} (%{t_pct}): {t_miktar:.2f} KG"), ln=True)
         
     pdf.output(filename)
 
@@ -169,10 +177,23 @@ with st.sidebar:
     ink_grams = st.number_input("%100 Dolulukta Gramaj (gr/m²)", min_value=0.1, value=5.08, step=0.01)
     
     st.divider()
-    st.header("🧪 Mürekkep Reçetesi")
+    st.header("🧪 Mürekkep Ana Reçetesi")
     solvent_orani = st.slider("Tiner (Solvent) Payı (%)", min_value=0, max_value=50, value=20, step=1)
     vernik_orani = st.slider("Vernik (Extender) Payı (%)", min_value=0, max_value=80, value=50, step=5)
     st.info("Vernik payı %50 ise, boya 1:1 oranında vernikle açılıyor demektir.")
+
+    st.divider()
+    st.header("💧 Tiner Alt Karışım Formülü (%)")
+    st.write("Toplamın %100 olmasına dikkat edin.")
+    t_etil = st.number_input("Etil Asetat (%)", min_value=0, max_value=100, value=50, step=5)
+    t_npropil = st.number_input("n-Propil Asetat (%)", min_value=0, max_value=100, value=30, step=5)
+    t_pm = st.number_input("PM (Propylene Glycol) (%)", min_value=0, max_value=100, value=10, step=5)
+    t_izopropil = st.number_input("İzopropil Alkol (%)", min_value=0, max_value=100, value=10, step=5)
+    t_butil = st.number_input("Butil Asetat (%)", min_value=0, max_value=100, value=0, step=5)
+    
+    toplam_tiner_yuzde = t_etil + t_npropil + t_pm + t_izopropil + t_butil
+    if toplam_tiner_yuzde != 100:
+        st.error(f"HATA: Tiner oranları toplamı %{toplam_tiner_yuzde}. Lütfen %100'e tamamlayın!")
     
     st.divider()
     st.header("📦 Üretim Ayarları")
@@ -183,7 +204,7 @@ with st.sidebar:
 # Dosya Yükleme Alanı
 uploaded_file = st.file_uploader("Lütfen PDF baskı dosyasını yükleyin", type=["pdf"])
 
-if uploaded_file is not None:
+if uploaded_file is not None and toplam_tiner_yuzde == 100:
     st.success(f"{uploaded_file.name} başarıyla yüklendi!")
     
     if st.button("🚀 Analizi Başlat", type="primary"):
@@ -211,7 +232,14 @@ if uploaded_file is not None:
                     'total_ink': {},
                     'grand_total_ink': {},
                     'solvent': solvent_orani,
-                    'vernik': vernik_orani
+                    'vernik': vernik_orani,
+                    'tiner_detay': {
+                        'Etil Asetat': t_etil,
+                        'n-Propil Asetat': t_npropil,
+                        'PM (Propylene Glycol)': t_pm,
+                        'Izopropil Alkol': t_izopropil,
+                        'Butil Asetat': t_butil
+                    }
                 }
                 
                 st.subheader("📊 Sayfa Bazlı Analiz (Tek Adet İçin)")
@@ -268,7 +296,7 @@ if uploaded_file is not None:
                         st.markdown(f"""
                         * 🛢️ **Ham Boya (Çin):** {ham_boya_kg:.2f} KG
                         * 💧 **Vernik:** {vernik_kg:.2f} KG
-                        * 🧪 **Tiner:** {tiner_kg:.2f} KG
+                        * 🧪 **Tiner Karışımı:** {tiner_kg:.2f} KG
                         ---
                         """)
                 
@@ -286,7 +314,15 @@ if uploaded_file is not None:
                 c1.metric("Toplam Islak Karışım", f"{t_islak:.2f} KG")
                 c2.metric("Toplam Ham Boya", f"{t_ham:.2f} KG")
                 c3.metric("Toplam Vernik", f"{t_vernik:.2f} KG")
-                c4.metric("Toplam Tiner", f"{t_tiner:.2f} KG")
+                c4.metric("Toplam Tiner Karışımı", f"{t_tiner:.2f} KG")
+                
+                # Alt Tiner Detaylarını Gösterme
+                if t_tiner > 0:
+                    with st.expander("🧪 Tiner Alt Bileşenleri (Detaylı KG)"):
+                        for t_name, t_pct in report_data['tiner_detay'].items():
+                            if t_pct > 0:
+                                t_miktar = t_tiner * (t_pct / 100.0)
+                                st.write(f"- **{t_name} (%{t_pct}):** {t_miktar:.2f} KG")
                 
                 # Rapor Oluşturma ve İndirme Butonu
                 report_file = "Sarfiyat_Raporu.pdf"
@@ -303,3 +339,5 @@ if uploaded_file is not None:
                     )
             
             os.remove(temp_pdf_path)
+elif uploaded_file is not None and toplam_tiner_yuzde != 100:
+    st.warning("Tiner karışım oranları toplamı %100 olmadan analiz başlatılamaz.")
