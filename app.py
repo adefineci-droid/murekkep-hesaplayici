@@ -112,30 +112,48 @@ def create_pdf_report(data, filename="Sarfiyat_Raporu.pdf"):
     for color_name, weight in data['total_ink'].items():
         pdf.cell(0, 8, tr_to_eng(f"{color_name}: {weight:.4f} gram"), ln=True)
         
-    # Toplam Sonuçlar (Sipariş - KG Cinsinden)
+    # Toplam Sonuçlar (Sipariş - KG Cinsinden ve Dağılımlı)
     pdf.ln(8)
     pdf.set_fill_color(230, 230, 230)
     pdf.set_font("Arial", "B", 14)
     pdf.cell(0, 10, tr_to_eng(f"TUM SIPARIS ICIN GENEL TOPLAM ({data['order_qty']:,.0f} Adet)"), ln=True, fill=True)
-    pdf.set_font("Arial", "B", 12)
+    pdf.set_font("Arial", "", 12)
+    
     for color_name, weight in data['grand_total_ink'].items():
         kg_weight = weight / 1000.0
-        pdf.cell(0, 8, tr_to_eng(f"{color_name}: {weight:,.1f} gram  ( ~ {kg_weight:.2f} KG )"), ln=True)
+        tiner_kg = kg_weight * (data['solvent'] / 100.0)
+        kalan_govde = kg_weight - tiner_kg
+        vernik_kg = kalan_govde * (data['vernik'] / 100.0)
+        ham_boya_kg = kalan_govde - vernik_kg
+        
+        pdf.set_font("Arial", "B", 12)
+        pdf.cell(0, 8, tr_to_eng(f"[{color_name}] Toplam Kova (Islak): {kg_weight:.2f} KG"), ln=True)
+        pdf.set_font("Arial", "", 11)
+        pdf.cell(0, 6, tr_to_eng(f"   -> Ham Boya (Cinden): {ham_boya_kg:.2f} KG"), ln=True)
+        pdf.cell(0, 6, tr_to_eng(f"   -> Vernik: {vernik_kg:.2f} KG"), ln=True)
+        pdf.cell(0, 6, tr_to_eng(f"   -> Tiner: {tiner_kg:.2f} KG"), ln=True)
+        pdf.ln(3)
         
     pdf.output(filename)
 
 # --- ARAYÜZ (UI) TASARIMI ---
 st.title("🎨 Ambalaj Mürekkep Sarfiyat ve Renk Analizi")
-st.markdown("Yüksek tirajlı rotogravür/flekso baskılar için metrekare ve renk ayrımı bazlı gramaj hesaplayıcı.")
+st.markdown("Yüksek tirajlı rotogravür/flekso baskılar için metrekare, renk ayrımı ve reçete bazlı gramaj hesaplayıcı.")
 
 # Yan Menü (Sidebar) Ayarları
 with st.sidebar:
     st.header("⚙️ Hesaplama Ayarları")
-    ink_grams = st.number_input("%100 Dolulukta Gramaj (gr/m²)", min_value=0.1, value=5.0, step=0.1)
+    ink_grams = st.number_input("%100 Dolulukta Gramaj (gr/m²)", min_value=0.1, value=5.08, step=0.01)
+    
+    st.divider()
+    st.header("🧪 Mürekkep Reçetesi")
+    solvent_orani = st.slider("Tiner (Solvent) Payı (%)", min_value=0, max_value=50, value=20, step=1)
+    vernik_orani = st.slider("Vernik (Extender) Payı (%)", min_value=0, max_value=80, value=50, step=5)
+    st.info("Vernik payı %50 ise, boya 1:1 oranında vernikle açılıyor demektir.")
     
     st.divider()
     st.header("📦 Üretim Ayarları")
-    order_qty = st.number_input("Sipariş Miktarı (Adet)", min_value=1, value=10000, step=1000)
+    order_qty = st.number_input("Sipariş Miktarı (Adet)", min_value=1, value=50000, step=1000)
     
     st.info("Sipariş miktarı, atölye için toplam hazırlanması gereken mürekkep hacmini (KG) hesaplamanızı sağlar.")
 
@@ -168,7 +186,9 @@ if uploaded_file is not None:
                     'total_area': total_area,
                     'pages': [],
                     'total_ink': {},
-                    'grand_total_ink': {}
+                    'grand_total_ink': {},
+                    'solvent': solvent_orani,
+                    'vernik': vernik_orani
                 }
                 
                 st.subheader("📊 Sayfa Bazlı Analiz (Tek Adet İçin)")
@@ -214,7 +234,20 @@ if uploaded_file is not None:
                     st.subheader(f"🏆 Tüm Sipariş İçin ({order_qty:,} Adet)")
                     for color, total_w in grand_total.items():
                         kg_w = total_w / 1000.0
-                        st.metric(label=color, value=f"{kg_w:.2f} KG", delta=f"{total_w:,.1f} gram", delta_color="off")
+                        
+                        # Reçete Hesaplamaları
+                        tiner_kg = kg_w * (solvent_orani / 100.0)
+                        kalan_govde_kg = kg_w - tiner_kg
+                        vernik_kg = kalan_govde_kg * (vernik_orani / 100.0)
+                        ham_boya_kg = kalan_govde_kg - vernik_kg
+                        
+                        st.metric(label=f"{color} (Toplam Kova)", value=f"{kg_w:.2f} KG")
+                        st.markdown(f"""
+                        * 🛢️ **Ham Boya (Çin):** {ham_boya_kg:.2f} KG
+                        * 💧 **Vernik:** {vernik_kg:.2f} KG
+                        * 🧪 **Tiner:** {tiner_kg:.2f} KG
+                        ---
+                        """)
                 
                 # Rapor Oluşturma ve İndirme Butonu
                 report_file = "Sarfiyat_Raporu.pdf"
